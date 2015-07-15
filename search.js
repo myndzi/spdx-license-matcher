@@ -54,6 +54,7 @@ module.exports = function search(searchDir) {
                 identifier: id
             };
         });
+
         return acc.concat(licenses);
     }, [ ]);
 };

@@ -1,5 +1,7 @@
 'use strict';
 
+var debug = require('debug')('spdx-license-matcher');
+
 // taken from the official unicode list for hyphen-equivalents
 var hyphens = [
     '\u002D', '\u007E', '\u00AD', '\u058A', '\u05BE', '\u1400',
@@ -63,18 +65,55 @@ var aliases = {
 var hyphenRE = new RegExp('('+hyphens.join('|')+')', 'g');
 var quoteRE = new RegExp('('+quotes.join('|')+')', 'g');
 // this one's really hard programmatically, so I tried to be conservative
-var bulletRE = /^\s*(([a-z]{1,2}|[A-Z]{1,2}|[MDCLXVImdclxvi]+|[0-9]+)?[^\s\w]|\(([a-z]{1,2}|[A-Z]{1,2}|[MDCLXVImdclxvi]+|[0-9]+)\))\s/mg;
+var bulletRE = /^\s*[^\s\w]?([a-zA-Z]|[MDCLXVImdclxvi]+|[0-9]+)?[^\s\w]\s/mg;
 var aliasRE = new RegExp('('+Object.keys(aliases).join('|')+')', 'g');
-var copyrightRE = /\s*(\00A9|\(\s+c\s+\)|copyright)\s*/gi
+var copyRE = /\s*(\u00A9|\(\s*c\s*\)|copyright)\s*/gi
+var copyrightRE = /\s*copyright (\d+(-\d+)|<<.*?>>).*?(all rights reserved\.?|$)|all rights reserved\.?/gmi;
 
 module.exports = function normalize(str) {
-    return str.replace(bulletRE, ' ')
-        .replace(copyrightRE, ' (c) ')
-        .replace(/(\(c\)\s+)+/g, ' (c) ')
+    return str.replace(bulletRE, function (a) {
+            debug('removing bullet:', a);
+            return ' ';
+        })
+        .replace(copyRE, ' copyright ')
+        .replace(/(copyright\s+)+/g, ' copyright ')
+        .replace(copyrightRE, function (a) {
+            debug('removing copyright:', a);
+            return '';
+        })
         .replace(/\s+/g, ' ')
         .toLowerCase()
         .replace(hyphenRE, '-')
         .replace(quoteRE, '"')
         .replace(aliasRE, function (match) { return aliases[match]; })
-        .trim()
+        .trim();
 };
+
+function isPre(str) {
+    str = str.replace(copyRE, ' copyright ')
+        .replace(/(copyright\s+)+/g, ' copyright ');
+
+    // remove any license header, such as the text "The Foo License:"
+    if (/licen[cs]e:?\s*$|^\s*\(.*?licen[cs]e\)\s*$/i.test(str)) { return true; }
+    // remove any copyright notices 
+    if (/^\s*copyright\b/.test(str)) { return true; }
+    // remove blank lines
+    if (/^\s*$/.test(str)) { return true; }
+    return false;
+}
+module.exports.trimStartAndEnd = function (str) {
+    var parts = str.split(/\r\n|\r|\n/);
+    while (parts.length && isPre(parts[0])) {
+        debug('removing preface:', parts[0]);
+        parts.shift();
+    }
+    str = parts.join('\n');
+    
+    // cut anything past the end of the license text
+    var end = str.match(/^(.*the license terms end here.*|\s*end of terms and conditions\s*|_{10,})$/mi);
+    if (end) {
+        debug('removing end text:', str.slice(end.index));
+        str = str.slice(0, end.index);
+    }
+    return str;
+}

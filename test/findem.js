@@ -13,8 +13,9 @@ dirs.filter(function (dir) {
     return !/^\./.test(dir);
 }).forEach(function (dir) {
     var searchDir = PATH.resolve(baseDir, dir);
-    var licenses = getPackageJsonLicenses(searchDir)
-        .concat(search(searchDir));
+    var licenses = search(searchDir);
+    /*getPackageJsonLicenses(searchDir)
+        .concat(search(searchDir));*/
     
     if (!licenses.length) {
         console.log(searchDir);
